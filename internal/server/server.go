@@ -178,9 +178,19 @@ func (s *Server) handleWrite(c *gin.Context) {
 }
 
 func (s *Server) handleQuery(c *gin.Context) {
+	// Get org and bucket from query parameters
+	org := c.Query("org")
+	bucket := c.Query("bucket")
+	if org == "" || bucket == "" {
+		s.log.Error("Missing org or bucket parameters")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "org and bucket are required"})
+		return
+	}
+
 	// Get measurement from query parameters
 	measurement := c.Query("measurement")
 	if measurement == "" {
+		s.log.Error("Missing measurement parameter")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "measurement is required"})
 		return
 	}
@@ -195,6 +205,7 @@ func (s *Server) handleQuery(c *gin.Context) {
 	if start != "" {
 		startTime, err = strconv.ParseInt(start, 10, 64)
 		if err != nil {
+			s.log.Errorf("Invalid start time: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid start time: %v", err)})
 			return
 		}
@@ -205,6 +216,7 @@ func (s *Server) handleQuery(c *gin.Context) {
 	if end != "" {
 		endTime, err = strconv.ParseInt(end, 10, 64)
 		if err != nil {
+			s.log.Errorf("Invalid end time: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid end time: %v", err)})
 			return
 		}
@@ -212,28 +224,45 @@ func (s *Server) handleQuery(c *gin.Context) {
 		endTime = time.Now().UnixNano()
 	}
 
+	s.log.Infof("Querying measurement %s from %d to %d", measurement, startTime, endTime)
+
 	// Query the database
 	points, err := s.db.GetMeasurementRange(measurement, startTime, endTime)
 	if err != nil {
+		s.log.Errorf("Failed to query measurements: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to query measurements: %v", err)})
 		return
 	}
 
-	// Convert points to response format
-	var results []map[string]interface{}
-	for _, point := range points {
-		result := map[string]interface{}{
-			"measurement": point.Measurement,
-			"tags":        point.Tags,
-			"fields":      point.Fields,
-			"timestamp":   point.Timestamp.UnixNano(),
-		}
-		results = append(results, result)
+	s.log.Infof("Found %d points", len(points))
+
+	// Convert points to InfluxDB v2 response format
+	response := map[string]interface{}{
+		"results": []map[string]interface{}{
+			{
+				"statement_id": 0,
+				"series": []map[string]interface{}{
+					{
+						"name":    measurement,
+						"columns": []string{"time", "field", "value"},
+						"values":  make([][]interface{}, 0, len(points)),
+					},
+				},
+			},
+		},
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"results": results,
-	})
+	for _, point := range points {
+		// For each field in the point, add a value
+		for field, value := range point.Fields {
+			response["results"].([]map[string]interface{})[0]["series"].([]map[string]interface{})[0]["values"] = append(
+				response["results"].([]map[string]interface{})[0]["series"].([]map[string]interface{})[0]["values"].([][]interface{}),
+				[]interface{}{point.Timestamp.UnixNano(), field, value},
+			)
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 func (s *Server) handlePing(c *gin.Context) {

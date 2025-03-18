@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -16,8 +17,16 @@ import (
 )
 
 func setupTestEnvironment(t *testing.T) (*server.Server, *udp.Server, *persistence.Manager) {
-	db, err := persistence.New(":memory:")
+	// Create a temporary file for the database
+	dbPath := "test.db"
+	db, err := persistence.New(dbPath)
 	assert.NoError(t, err)
+
+	// Clean up the database file when the test finishes
+	t.Cleanup(func() {
+		db.Close()
+		os.Remove(dbPath)
+	})
 
 	// Use dynamic port allocation
 	httpServer := server.New(":0", db)
@@ -73,7 +82,7 @@ func TestEndToEnd(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Query data
-		resp, err := http.Get("http://" + httpAddress + "/api/v2/query?measurement=test")
+		resp, err := http.Get("http://" + httpAddress + "/api/v2/query?org=my-org&bucket=my-bucket&measurement=test")
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	})
@@ -92,7 +101,7 @@ func TestEndToEnd(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 
 		// Query the data through HTTP
-		resp, err := http.Get("http://" + httpAddress + "/api/v2/query?measurement=test")
+		resp, err := http.Get("http://" + httpAddress + "/api/v2/query?org=my-org&bucket=my-bucket&measurement=test")
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	})
