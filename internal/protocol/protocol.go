@@ -105,6 +105,7 @@ func Parse(line string) (*LineProtocol, error) {
 
 	// Parse tags
 	if tags != "" {
+		lp.Tags = make(map[string]string)
 		tagPairs := strings.Split(tags, ",")
 		for _, pair := range tagPairs {
 			kv := strings.SplitN(pair, "=", 2)
@@ -117,8 +118,6 @@ func Parse(line string) (*LineProtocol, error) {
 			// Handle quoted tag values
 			if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
 				value = value[1 : len(value)-1]
-			} else if strings.Contains(value, " ") {
-				return nil, fmt.Errorf("unquoted tag value contains spaces: %s", value)
 			}
 
 			if key == "" {
@@ -131,6 +130,9 @@ func Parse(line string) (*LineProtocol, error) {
 			lp.Tags[key] = value
 			lp.tagOrder = append(lp.tagOrder, key)
 		}
+	} else {
+		lp.Tags = nil
+		lp.tagOrder = nil
 	}
 
 	// Split fields and timestamp
@@ -140,6 +142,7 @@ func Parse(line string) (*LineProtocol, error) {
 	}
 
 	// Parse fields
+	lp.Fields = make(map[string]string)
 	fields := strings.Split(fieldsAndTime[0], ",")
 	for _, field := range fields {
 		kv := strings.SplitN(field, "=", 2)
@@ -194,6 +197,10 @@ func Parse(line string) (*LineProtocol, error) {
 
 // String converts the LineProtocol struct to a line protocol string
 func (lp *LineProtocol) String() string {
+	if lp == nil {
+		return ""
+	}
+
 	var sb strings.Builder
 
 	// Write measurement
@@ -206,7 +213,7 @@ func (lp *LineProtocol) String() string {
 	}
 
 	// Write tags in order
-	if len(lp.tagOrder) > 0 {
+	if lp.Tags != nil && len(lp.tagOrder) > 0 {
 		for _, k := range lp.tagOrder {
 			v := lp.Tags[k]
 			sb.WriteString(",")
@@ -220,7 +227,7 @@ func (lp *LineProtocol) String() string {
 				sb.WriteString(v)
 			}
 		}
-	} else {
+	} else if lp.Tags != nil {
 		// Fallback to sorted order if no order is preserved
 		keys := make([]string, 0, len(lp.Tags))
 		for k := range lp.Tags {
@@ -244,7 +251,7 @@ func (lp *LineProtocol) String() string {
 
 	// Write fields in order
 	sb.WriteString(" ")
-	if len(lp.fieldOrder) > 0 {
+	if lp.Fields != nil && len(lp.fieldOrder) > 0 {
 		first := true
 		for _, k := range lp.fieldOrder {
 			if !first {
@@ -255,7 +262,7 @@ func (lp *LineProtocol) String() string {
 			sb.WriteString("=")
 			sb.WriteString(lp.Fields[k])
 		}
-	} else {
+	} else if lp.Fields != nil {
 		// Fallback to unordered if no order is preserved
 		first := true
 		for k, v := range lp.Fields {
@@ -299,8 +306,8 @@ func isNumeric(s string) bool {
 func New(measurement string) *LineProtocol {
 	return &LineProtocol{
 		Measurement: measurement,
-		Tags:        make(map[string]string),
-		Fields:      make(map[string]string),
+		Tags:        nil,
+		Fields:      nil,
 		fieldOrder:  make([]string, 0),
 		tagOrder:    make([]string, 0),
 	}

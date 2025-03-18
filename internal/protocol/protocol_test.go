@@ -94,11 +94,13 @@ func TestParseBasic(t *testing.T) {
 				return
 			}
 			assert.NoError(t, err)
-			if tt.expected != nil {
+			if got != nil {
 				assert.Equal(t, tt.expected.Measurement, got.Measurement)
 				assert.Equal(t, tt.expected.Tags, got.Tags)
 				assert.Equal(t, tt.expected.Fields, got.Fields)
 				assert.Equal(t, tt.expected.Timestamp, got.Timestamp)
+			} else {
+				assert.Nil(t, tt.expected)
 			}
 		})
 	}
@@ -145,7 +147,7 @@ func TestNewLineProtocol(t *testing.T) {
 	proto := New("cpu")
 	assert.NotNil(t, proto)
 	assert.Equal(t, "cpu", proto.Measurement)
-	assert.NotNil(t, proto.Tags)
-	assert.NotNil(t, proto.Fields)
+	assert.Nil(t, proto.Tags)
+	assert.Nil(t, proto.Fields)
 	assert.Equal(t, int64(0), proto.Timestamp)
 }
