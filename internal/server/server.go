@@ -2,10 +2,12 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -675,65 +677,34 @@ func (s *Server) handleV1Query(c *gin.Context) {
 	}
 
 	// Process points based on aggregation
-	if aggregation != "" {
-		// For aggregations, group by host if specified
-		groupedValues := make(map[string][]float64)
+	if aggregation == "mean" {
+		// Extract group by interval from the query
+		groupByInterval := int64(5 * 60 * 1e9) // default 5 minutes in nanoseconds
+		if strings.Contains(queryLower, "group by time") {
+			groupByPart := strings.Split(queryLower, "group by time(")[1]
+			if strings.Contains(groupByPart, "m)") {
+				minutes := strings.Split(groupByPart, "m)")[0]
+				if mins, err := strconv.ParseInt(minutes, 10, 64); err == nil {
+					groupByInterval = mins * 60 * 1e9 // convert minutes to nanoseconds
+					s.log.Infof("Using group by interval: %d minutes", mins)
+				}
+			}
+		}
+
+		// Group points by time bucket
+		groupedPoints := make(map[int64][]float64)
+
 		for _, point := range points {
-			host := "default"
-			if val, ok := point.Tags["host"]; ok {
-				host = val
-			}
-			if field == "*" {
-				for _, value := range point.Fields {
-					groupedValues[host] = append(groupedValues[host], value)
-				}
-			} else if val, ok := point.Fields[field]; ok {
-				groupedValues[host] = append(groupedValues[host], val)
+			if val, ok := point.Fields[field]; ok {
+				// Calculate bucket timestamp
+				ts := point.Timestamp.UnixNano()
+				bucketTime := ts - (ts % groupByInterval)
+				s.log.Infof("Point timestamp: %d, Bucket timestamp: %d", ts, bucketTime)
+				groupedPoints[bucketTime] = append(groupedPoints[bucketTime], val)
 			}
 		}
 
-		// Calculate aggregation for each group
-		results := make(map[string]float64)
-		for host, values := range groupedValues {
-			if len(values) == 0 {
-				results[host] = 0
-				continue
-			}
-			switch aggregation {
-			case "mean":
-				sum := 0.0
-				for _, v := range values {
-					sum += v
-				}
-				results[host] = sum / float64(len(values))
-			case "sum":
-				sum := 0.0
-				for _, v := range values {
-					sum += v
-				}
-				results[host] = sum
-			case "count":
-				results[host] = float64(len(values))
-			case "min":
-				min := values[0]
-				for _, v := range values[1:] {
-					if v < min {
-						min = v
-					}
-				}
-				results[host] = min
-			case "max":
-				max := values[0]
-				for _, v := range values[1:] {
-					if v > max {
-						max = v
-					}
-				}
-				results[host] = max
-			}
-		}
-
-		// Prepare response for aggregated results
+		// Calculate mean for each bucket
 		response := map[string]interface{}{
 			"results": []map[string]interface{}{
 				{
@@ -741,7 +712,7 @@ func (s *Server) handleV1Query(c *gin.Context) {
 					"series": []map[string]interface{}{
 						{
 							"name":    measurement,
-							"columns": []string{"time", "host", field},
+							"columns": []string{"time", "mean"},
 							"values":  make([][]interface{}, 0),
 						},
 					},
@@ -749,12 +720,42 @@ func (s *Server) handleV1Query(c *gin.Context) {
 			},
 		}
 
-		// Add results for each host
-		for host, value := range results {
+		// Sort timestamps for consistent ordering
+		timestamps := make([]int64, 0, len(groupedPoints))
+		for ts := range groupedPoints {
+			timestamps = append(timestamps, ts)
+		}
+		sort.Slice(timestamps, func(i, j int) bool { return timestamps[i] < timestamps[j] })
+
+		// Calculate mean for each bucket and add to response
+		for _, ts := range timestamps {
+			values := groupedPoints[ts]
+			sum := 0.0
+			for _, v := range values {
+				sum += v
+			}
+			mean := sum / float64(len(values))
+
+			s.log.Infof("Adding bucket - Time: %d (UTC: %s), Mean: %f",
+				ts,
+				time.Unix(0, ts).UTC().Format(time.RFC3339Nano),
+				mean)
+
+			// Convert timestamp from nanoseconds to milliseconds for Grafana
+			tsMillis := ts / 1000000
+
 			response["results"].([]map[string]interface{})[0]["series"].([]map[string]interface{})[0]["values"] = append(
 				response["results"].([]map[string]interface{})[0]["series"].([]map[string]interface{})[0]["values"].([][]interface{}),
-				[]interface{}{time.Now().UnixNano(), host, value},
+				[]interface{}{tsMillis, mean},
 			)
+		}
+
+		// Log the response payload in a more readable format
+		jsonResponse, err := json.MarshalIndent(response, "", "  ")
+		if err != nil {
+			s.log.Errorf("Error marshaling response: %v", err)
+		} else {
+			s.log.Infof("Response payload:\n%s", string(jsonResponse))
 		}
 
 		c.JSON(http.StatusOK, response)
@@ -782,17 +783,29 @@ func (s *Server) handleV1Query(c *gin.Context) {
 		if field == "*" {
 			// Include all fields
 			for _, fieldValue := range point.Fields {
+				// Convert timestamp from nanoseconds to milliseconds for Grafana
+				tsMillis := point.Timestamp.UnixNano() / 1000000
 				response["results"].([]map[string]interface{})[0]["series"].([]map[string]interface{})[0]["values"] = append(
 					response["results"].([]map[string]interface{})[0]["series"].([]map[string]interface{})[0]["values"].([][]interface{}),
-					[]interface{}{point.Timestamp.UnixNano(), fieldValue},
+					[]interface{}{tsMillis, fieldValue},
 				)
 			}
 		} else if val, ok := point.Fields[field]; ok {
+			// Convert timestamp from nanoseconds to milliseconds for Grafana
+			tsMillis := point.Timestamp.UnixNano() / 1000000
 			response["results"].([]map[string]interface{})[0]["series"].([]map[string]interface{})[0]["values"] = append(
 				response["results"].([]map[string]interface{})[0]["series"].([]map[string]interface{})[0]["values"].([][]interface{}),
-				[]interface{}{point.Timestamp.UnixNano(), val},
+				[]interface{}{tsMillis, val},
 			)
 		}
+	}
+
+	// Log the response payload in a more readable format
+	jsonResponse, err := json.MarshalIndent(response, "", "  ")
+	if err != nil {
+		s.log.Errorf("Error marshaling response: %v", err)
+	} else {
+		s.log.Infof("Response payload:\n%s", string(jsonResponse))
 	}
 
 	c.JSON(http.StatusOK, response)
