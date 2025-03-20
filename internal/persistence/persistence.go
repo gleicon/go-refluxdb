@@ -100,12 +100,44 @@ func (m *Manager) GetMeasurementRange(measurement string, start, end int64) ([]P
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	// First, let's check if we have any data for this measurement at all
+	countQuery := `SELECT COUNT(*) FROM points WHERE measurement = ?`
+	var count int
+	err := m.db.QueryRow(countQuery, measurement).Scan(&count)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count measurements: %w", err)
+	}
+	fmt.Printf("Total points for measurement %s: %d\n", measurement, count)
+
+	// Get the min and max timestamps for this measurement
+	timeRangeQuery := `SELECT MIN(timestamp), MAX(timestamp) FROM points WHERE measurement = ?`
+	var minTime, maxTime int64
+	err = m.db.QueryRow(timeRangeQuery, measurement).Scan(&minTime, &maxTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get time range: %w", err)
+	}
+	fmt.Printf("Time range for measurement %s: min=%d (UTC: %s), max=%d (UTC: %s)\n",
+		measurement,
+		minTime,
+		time.Unix(0, minTime).UTC().Format(time.RFC3339Nano),
+		maxTime,
+		time.Unix(0, maxTime).UTC().Format(time.RFC3339Nano))
+
 	query := `
         SELECT timestamp, tags, fields
         FROM points
         WHERE measurement = ? AND timestamp >= ? AND timestamp <= ?
         ORDER BY timestamp
     `
+
+	// Log the query parameters
+	fmt.Printf("Executing query: %s with params: measurement=%s, start=%d (UTC: %s), end=%d (UTC: %s)\n",
+		query,
+		measurement,
+		start,
+		time.Unix(0, start).UTC().Format(time.RFC3339Nano),
+		end,
+		time.Unix(0, end).UTC().Format(time.RFC3339Nano))
 
 	rows, err := m.db.Query(query, measurement, start, end)
 	if err != nil {
@@ -122,6 +154,11 @@ func (m *Manager) GetMeasurementRange(measurement string, start, end int64) ([]P
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
+
+		// Log each point's timestamp
+		fmt.Printf("Found point with timestamp: %d (UTC: %s)\n",
+			timestamp,
+			time.Unix(0, timestamp).UTC().Format(time.RFC3339Nano))
 
 		var tags map[string]string
 		var fields map[string]float64
@@ -176,4 +213,9 @@ func (m *Manager) ListTimeseries() ([]string, error) {
 	}
 
 	return measurements, nil
+}
+
+// GetDB returns the underlying database connection
+func (m *Manager) GetDB() *sql.DB {
+	return m.db
 }
