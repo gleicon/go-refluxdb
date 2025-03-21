@@ -1,6 +1,12 @@
 # Go RefluxDB
 
-The cure for timeseries GERD (gastro etc reflux disease). A lightweight InfluxDB-compatible time series database written in Go, which implements a subset of the InfluxDB HTTP and UDP APIs, making it compatible with existing InfluxDB clients and tools like Grafana.
+[![Go Report Card](https://goreportcard.com/badge/github.com/gleicon/go-refluxdb)](https://goreportcard.com/report/github.com/gleicon/go-refluxdb)
+[![GoDoc](https://godoc.org/github.com/gleicon/go-refluxdb?status.svg)](https://godoc.org/github.com/gleicon/go-refluxdb)
+[![Tests](https://github.com/gleicon/go-refluxdb/actions/workflows/test.yml/badge.svg)](https://github.com/gleicon/go-refluxdb/actions/workflows/test.yml)
+[![Integration](https://github.com/gleicon/go-refluxdb/actions/workflows/integration.yml/badge.svg)](https://github.com/gleicon/go-refluxdb/actions/workflows/integration.yml)
+[![License](https://img.shields.io/github/license/gleicon/go-refluxdb)](LICENSE)
+
+The cure for time-series GERD (gastro etc reflux disease). A lightweight InfluxDB-compatible time series database written in Go, which implements a subset of the InfluxDB HTTP and UDP APIs, making it compatible with existing InfluxDB clients and tools like Grafana.
 
 ## Features
 

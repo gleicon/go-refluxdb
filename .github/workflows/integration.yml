@@ -1,0 +1,49 @@
+name: Integration Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+        
+    - name: Install dependencies
+      run: make deps
+      
+    - name: Build
+      run: make build
+      
+    - name: Install InfluxDB CLI
+      run: |
+        wget https://dl.influxdata.com/influxdb/releases/influxdb2-client-2.7.3-linux-amd64.tar.gz
+        tar xvzf influxdb2-client-2.7.3-linux-amd64.tar.gz
+        sudo cp influxdb2-client-2.7.3-linux-amd64/influx /usr/local/bin/
+        
+    - name: Start RefluxDB
+      run: |
+        ./build/refluxdb &
+        sleep 5  # Wait for server to start
+        
+    - name: Run integration tests
+      run: |
+        # Create database and insert data
+        influx -host localhost -port 8086 -execute "CREATE DATABASE mydb"
+        influx -host localhost -port 8086 -database mydb -execute "INSERT cpu,host=server1 value=42.5"
+        influx -host localhost -port 8086 -database mydb -execute "INSERT cpu,host=server2 value=85.0"
+        
+        # Query data
+        influx -host localhost -port 8086 -database mydb -execute "SELECT * FROM cpu"
+        influx -host localhost -port 8086 -database mydb -execute "SELECT mean(\"value\") FROM cpu WHERE time >= now() - 1h GROUP BY time(5m) fill(null)"
+        
+        # Run integration tests
+        make test 
