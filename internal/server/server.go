@@ -351,13 +351,13 @@ func (s *Server) handleV1Write(c *gin.Context) {
 func (s *Server) handleV1Query(c *gin.Context) {
 	// Log the incoming request details
 	s.log.Infof("Received %s request to %s", c.Request.Method, c.Request.URL.Path)
-	s.log.Infof("Query parameters: %v", c.Request.URL.Query())
+	s.log.Debugf("Query parameters: %v", c.Request.URL.Query())
 
 	// Get query from query parameters or body
 	var query string
 	if c.Request.Method == "GET" {
 		query = c.Query("q")
-		s.log.Infof("GET query from parameters: %q", query)
+		s.log.Debugf("GET query from parameters: %q", query)
 		if query == "" {
 			// Try to get query from body even for GET requests
 			body, err := ioutil.ReadAll(c.Request.Body)
@@ -367,12 +367,12 @@ func (s *Server) handleV1Query(c *gin.Context) {
 				return
 			}
 			query = string(body)
-			s.log.Infof("GET query from body: %q", query)
+			s.log.Debugf("GET query from body: %q", query)
 		}
 	} else {
 		// For POST requests, try query parameter first
 		query = c.Query("q")
-		s.log.Infof("POST query from parameters: %q", query)
+		s.log.Debugf("POST query from parameters: %q", query)
 		if query == "" {
 			// If not in query parameters, try body
 			body, err := ioutil.ReadAll(c.Request.Body)
@@ -382,7 +382,7 @@ func (s *Server) handleV1Query(c *gin.Context) {
 				return
 			}
 			query = string(body)
-			s.log.Infof("POST query from body: %q", query)
+			s.log.Debugf("POST query from body: %q", query)
 		}
 	}
 
@@ -394,7 +394,7 @@ func (s *Server) handleV1Query(c *gin.Context) {
 
 	// Convert query to lowercase for case-insensitive matching
 	queryLower := strings.ToLower(query)
-	s.log.Infof("Processing query: %q", queryLower)
+	s.log.Debugf("Processing query: %q", queryLower)
 
 	// Handle SHOW DATABASES command
 	if queryLower == "show databases" {
@@ -557,14 +557,14 @@ func (s *Server) handleV1Query(c *gin.Context) {
 				// Parse time range from WHERE clause
 				if timeIdx := strings.Index(whereClause, "time"); timeIdx != -1 {
 					timePart := strings.TrimSpace(whereClause[timeIdx+4:])
-					s.log.Infof("Parsing time part: %q", timePart)
+					s.log.Debugf("Parsing time part: %q", timePart)
 
 					// Parse >= condition
 					if startIdx := strings.Index(timePart, ">="); startIdx != -1 {
 						startStr := strings.TrimSpace(timePart[startIdx+2:])
 						if endIdx := strings.Index(startStr, "and"); endIdx != -1 {
 							startStr = strings.TrimSpace(startStr[:endIdx])
-							s.log.Infof("Found start time string: %q", startStr)
+							s.log.Debugf("Found start time string: %q", startStr)
 							var parseErr error
 							// Convert to nanoseconds if in milliseconds
 							if strings.HasSuffix(startStr, "ms") {
@@ -576,7 +576,7 @@ func (s *Server) handleV1Query(c *gin.Context) {
 									return
 								}
 								startTime *= 1000000 // Convert ms to ns
-								s.log.Infof("Converted start time from ms to ns: %d", startTime)
+								s.log.Debugf("Converted start time from ms to ns: %d", startTime)
 							} else {
 								// If no ms suffix, assume nanoseconds
 								startTime, parseErr = strconv.ParseInt(startStr, 10, 64)
@@ -585,7 +585,7 @@ func (s *Server) handleV1Query(c *gin.Context) {
 									c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid start time format: %v", parseErr)})
 									return
 								}
-								s.log.Infof("Parsed start time as ns: %d", startTime)
+								s.log.Debugf("Parsed start time as ns: %d", startTime)
 							}
 						}
 					}
@@ -593,13 +593,13 @@ func (s *Server) handleV1Query(c *gin.Context) {
 					// Parse <= condition
 					if endIdx := strings.Index(timePart, "<="); endIdx != -1 {
 						endStr := strings.TrimSpace(timePart[endIdx+2:])
-						s.log.Infof("Found end time string: %q", endStr)
+						s.log.Debugf("Found end time string: %q", endStr)
 						// Find the end of the timestamp by looking for the next space or end of string
 						spaceIdx := strings.Index(endStr, " ")
 						if spaceIdx != -1 {
 							endStr = endStr[:spaceIdx]
 						}
-						s.log.Infof("Trimmed end time string: %q", endStr)
+						s.log.Debugf("Trimmed end time string: %q", endStr)
 						var parseErr error
 						// Convert to nanoseconds if in milliseconds
 						if strings.HasSuffix(endStr, "ms") {
@@ -611,7 +611,7 @@ func (s *Server) handleV1Query(c *gin.Context) {
 								return
 							}
 							endTime *= 1000000 // Convert ms to ns
-							s.log.Infof("Converted end time from ms to ns: %d", endTime)
+							s.log.Debugf("Converted end time from ms to ns: %d", endTime)
 						} else {
 							// If no ms suffix, assume nanoseconds
 							endTime, parseErr = strconv.ParseInt(endStr, 10, 64)
@@ -620,7 +620,7 @@ func (s *Server) handleV1Query(c *gin.Context) {
 								c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid end time format: %v", parseErr)})
 								return
 							}
-							s.log.Infof("Parsed end time as ns: %d", endTime)
+							s.log.Debugf("Parsed end time as ns: %d", endTime)
 						}
 					}
 				}
@@ -649,7 +649,7 @@ func (s *Server) handleV1Query(c *gin.Context) {
 	// Log the query in a format ready for InfluxDB CLI
 	influxQuery := fmt.Sprintf("SELECT mean(\"%s\") FROM \"%s\" WHERE time >= %dms and time <= %dms GROUP BY time(1m) fill(null) ORDER BY time ASC",
 		field, measurement, startTime/1000000, endTime/1000000)
-	s.log.Infof("InfluxDB CLI ready query: %s", influxQuery)
+	s.log.Debugf("InfluxDB CLI ready query: %s", influxQuery)
 
 	// Query the database with the parsed time range
 	s.log.Infof("Querying measurement %s with time range: start=%d (UTC: %s), end=%d (UTC: %s)",
@@ -668,10 +668,10 @@ func (s *Server) handleV1Query(c *gin.Context) {
 
 	s.log.Infof("Found %d points in time range", len(points))
 	if len(points) > 0 {
-		s.log.Infof("First point timestamp: %d (UTC: %s)",
+		s.log.Debugf("First point timestamp: %d (UTC: %s)",
 			points[0].Timestamp.UnixNano(),
 			points[0].Timestamp.UTC().Format(time.RFC3339Nano))
-		s.log.Infof("Last point timestamp: %d (UTC: %s)",
+		s.log.Debugf("Last point timestamp: %d (UTC: %s)",
 			points[len(points)-1].Timestamp.UnixNano(),
 			points[len(points)-1].Timestamp.UTC().Format(time.RFC3339Nano))
 	}
@@ -686,7 +686,7 @@ func (s *Server) handleV1Query(c *gin.Context) {
 				minutes := strings.Split(groupByPart, "m)")[0]
 				if mins, err := strconv.ParseInt(minutes, 10, 64); err == nil {
 					groupByInterval = mins * 60 * 1e9 // convert minutes to nanoseconds
-					s.log.Infof("Using group by interval: %d minutes", mins)
+					s.log.Debugf("Using group by interval: %d minutes", mins)
 				}
 			}
 		}
@@ -699,7 +699,7 @@ func (s *Server) handleV1Query(c *gin.Context) {
 				// Calculate bucket timestamp
 				ts := point.Timestamp.UnixNano()
 				bucketTime := ts - (ts % groupByInterval)
-				s.log.Infof("Point timestamp: %d, Bucket timestamp: %d", ts, bucketTime)
+				s.log.Debugf("Point timestamp: %d, Bucket timestamp: %d", ts, bucketTime)
 				groupedPoints[bucketTime] = append(groupedPoints[bucketTime], val)
 			}
 		}
@@ -736,7 +736,7 @@ func (s *Server) handleV1Query(c *gin.Context) {
 			}
 			mean := sum / float64(len(values))
 
-			s.log.Infof("Adding bucket - Time: %d (UTC: %s), Mean: %f",
+			s.log.Debugf("Adding bucket - Time: %d (UTC: %s), Mean: %f",
 				ts,
 				time.Unix(0, ts).UTC().Format(time.RFC3339Nano),
 				mean)
@@ -755,7 +755,7 @@ func (s *Server) handleV1Query(c *gin.Context) {
 		if err != nil {
 			s.log.Errorf("Error marshaling response: %v", err)
 		} else {
-			s.log.Infof("Response payload:\n%s", string(jsonResponse))
+			s.log.Debugf("Response payload:\n%s", string(jsonResponse))
 		}
 
 		c.JSON(http.StatusOK, response)
@@ -805,7 +805,7 @@ func (s *Server) handleV1Query(c *gin.Context) {
 	if err != nil {
 		s.log.Errorf("Error marshaling response: %v", err)
 	} else {
-		s.log.Infof("Response payload:\n%s", string(jsonResponse))
+		s.log.Debugf("Response payload:\n%s", string(jsonResponse))
 	}
 
 	c.JSON(http.StatusOK, response)

@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -107,7 +109,7 @@ func (m *Manager) GetMeasurementRange(measurement string, start, end int64) ([]P
 	if err != nil {
 		return nil, fmt.Errorf("failed to count measurements: %w", err)
 	}
-	fmt.Printf("Total points for measurement %s: %d\n", measurement, count)
+	log.Debugf("Total points for measurement %s: %d\n", measurement, count)
 
 	// Get the min and max timestamps for this measurement
 	timeRangeQuery := `SELECT MIN(timestamp), MAX(timestamp) FROM points WHERE measurement = ?`
@@ -116,7 +118,7 @@ func (m *Manager) GetMeasurementRange(measurement string, start, end int64) ([]P
 	if err != nil {
 		return nil, fmt.Errorf("failed to get time range: %w", err)
 	}
-	fmt.Printf("Time range for measurement %s: min=%d (UTC: %s), max=%d (UTC: %s)\n",
+	log.Debugf("Time range for measurement %s: min=%d (UTC: %s), max=%d (UTC: %s)\n",
 		measurement,
 		minTime,
 		time.Unix(0, minTime).UTC().Format(time.RFC3339Nano),
@@ -131,7 +133,7 @@ func (m *Manager) GetMeasurementRange(measurement string, start, end int64) ([]P
     `
 
 	// Log the query parameters
-	fmt.Printf("Executing query: %s with params: measurement=%s, start=%d (UTC: %s), end=%d (UTC: %s)\n",
+	log.Debugf("Executing query: %s with params: measurement=%s, start=%d (UTC: %s), end=%d (UTC: %s)\n",
 		query,
 		measurement,
 		start,
@@ -156,7 +158,7 @@ func (m *Manager) GetMeasurementRange(measurement string, start, end int64) ([]P
 		}
 
 		// Log each point's timestamp
-		fmt.Printf("Found point with timestamp: %d (UTC: %s)\n",
+		log.Debugf("Found point with timestamp: %d (UTC: %s)\n",
 			timestamp,
 			time.Unix(0, timestamp).UTC().Format(time.RFC3339Nano))
 
