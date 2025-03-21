@@ -91,6 +91,50 @@ curl -G "http://localhost:8086/query" \
 3. Set the database name
 4. Test the connection
 
+### Using the InfluxDB CLI
+
+The InfluxDB CLI can be used to interact with RefluxDB. Here's a complete example session:
+
+```bash
+# Connect to the database
+influx -host localhost -port 8086
+
+# Once connected, you can run commands:
+> CREATE DATABASE mydb
+> USE mydb
+
+# Insert some data points
+> INSERT cpu,host=server1 value=42.5
+> INSERT cpu,host=server2 value=85.0
+> INSERT memory,host=server1 used=75.5,free=24.5
+> INSERT memory,host=server2 used=82.3,free=17.7
+
+# Query the data
+> SELECT * FROM cpu
+> SELECT mean("value") FROM cpu WHERE time >= now() - 1h GROUP BY time(5m) fill(null)
+> SELECT * FROM memory WHERE "host" = 'server1'
+
+# Show available databases
+> SHOW DATABASES
+
+# Show available measurements
+> SHOW MEASUREMENTS
+
+# Show series
+> SHOW SERIES
+
+# Show tag keys
+> SHOW TAG KEYS
+
+# Show field keys
+> SHOW FIELD KEYS
+
+# Exit the CLI
+> exit
+```
+
+Note: The InfluxDB CLI needs to be installed separately. You can download it from the [InfluxDB downloads page](https://portal.influxdata.com/downloads/).
+
 ## Development
 
 ### Prerequisites
