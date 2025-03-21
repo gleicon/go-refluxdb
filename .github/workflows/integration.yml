@@ -23,12 +23,6 @@ jobs:
     - name: Build
       run: make build
       
-    - name: Install InfluxDB CLI
-      run: |
-        wget https://dl.influxdata.com/influxdb/releases/influxdb2-client-2.7.3-linux-amd64.tar.gz
-        tar xvzf influxdb2-client-2.7.3-linux-amd64.tar.gz
-        sudo cp influxdb2-client-2.7.3-linux-amd64/bin/influx /usr/local/bin/
-        
     - name: Start RefluxDB
       run: |
         ./build/refluxdb &
@@ -36,14 +30,22 @@ jobs:
         
     - name: Run integration tests
       run: |
-        # Create database and insert data
-        influx -host localhost -port 8086 -execute "CREATE DATABASE mydb"
-        influx -host localhost -port 8086 -database mydb -execute "INSERT cpu,host=server1 value=42.5"
-        influx -host localhost -port 8086 -database mydb -execute "INSERT cpu,host=server2 value=85.0"
+        # Send test data via UDP
+        echo "cpu,host=server1 value=42.5" | nc -u localhost 8089
+        echo "cpu,host=server2 value=85.0" | nc -u localhost 8089
+        echo "memory,host=server1 used=75.5,free=24.5" | nc -u localhost 8089
+        echo "memory,host=server2 used=82.3,free=17.7" | nc -u localhost 8089
         
-        # Query data
-        influx -host localhost -port 8086 -database mydb -execute "SELECT * FROM cpu"
-        influx -host localhost -port 8086 -database mydb -execute "SELECT mean(\"value\") FROM cpu WHERE time >= now() - 1h GROUP BY time(5m) fill(null)"
+        # Give some time for data to be processed
+        sleep 2
+        
+        # Test HTTP endpoints
+        curl -X POST "http://localhost:8086/write?db=mydb" --data-binary "cpu,host=server3 value=95.0"
+        curl -X POST "http://localhost:8086/write?db=mydb" --data-binary "memory,host=server3 used=90.0,free=10.0"
+        
+        # Query data via HTTP
+        curl -G "http://localhost:8086/query" --data-urlencode "db=mydb" --data-urlencode "q=SELECT * FROM cpu"
+        curl -G "http://localhost:8086/query" --data-urlencode "db=mydb" --data-urlencode "q=SELECT mean(\"value\") FROM cpu WHERE time >= now() - 1h GROUP BY time(5m) fill(null)"
         
         # Run integration tests
         make test 

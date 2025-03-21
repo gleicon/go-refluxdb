@@ -16,7 +16,11 @@ MAIN_PACKAGE=./cmd/refluxdb
 # Test directories
 TEST_DIRS=./internal/... ./tests/...
 
-.PHONY: all build clean test run deps help
+# Docker parameters
+DOCKER_IMAGE=$(BINARY_NAME)
+DOCKER_CONTAINER=$(BINARY_NAME)
+
+.PHONY: all build clean test run deps help docker-build docker-run docker-stop docker-rm docker-logs
 
 all: clean deps build test ## Build and run tests
 
@@ -77,10 +81,36 @@ lint: ## Run linter
 
 # Docker targets
 docker-build: ## Build docker image
-	docker build -t $(BINARY_NAME) .
+	docker build -t $(DOCKER_IMAGE) .
 
 docker-run: ## Run docker container
-	docker run -p 8086:8086 -p 8089:8089/udp $(BINARY_NAME)
+	docker run -d \
+		--name $(DOCKER_CONTAINER) \
+		-p 8086:8086 \
+		-p 8089:8089/udp \
+		$(DOCKER_IMAGE)
+
+docker-stop: ## Stop docker container
+	docker stop $(DOCKER_CONTAINER)
+
+docker-rm: ## Remove docker container
+	docker rm $(DOCKER_CONTAINER)
+
+docker-logs: ## Show docker container logs
+	docker logs $(DOCKER_CONTAINER)
+
+docker-clean: docker-stop docker-rm ## Stop and remove docker container
+
+docker-test: docker-build docker-run ## Build and run docker container
+	@echo "Waiting for container to start..."
+	@sleep 5
+	@echo "Testing HTTP endpoint..."
+	@curl -s http://localhost:8086/health
+	@echo "Testing UDP endpoint..."
+	@echo "cpu,host=test value=42.5" | nc -u localhost 8089
+	@echo "Testing query endpoint..."
+	@curl -s -G "http://localhost:8086/query" --data-urlencode "db=mydb" --data-urlencode "q=SELECT * FROM cpu"
+	@make docker-clean
 
 # CI targets
 ci: deps fmt vet lint test ## Run all CI tasks
