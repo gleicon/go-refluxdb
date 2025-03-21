@@ -6,7 +6,7 @@
 [![Integration](https://github.com/gleicon/go-refluxdb/actions/workflows/integration.yml/badge.svg)](https://github.com/gleicon/go-refluxdb/actions/workflows/integration.yml)
 [![License](https://img.shields.io/github/license/gleicon/go-refluxdb)](LICENSE)
 
-The cure for time-series GERD (gastro etc reflux disease). A lightweight InfluxDB-compatible time series database written in Go, which implements a subset of the InfluxDB HTTP and UDP APIs, making it compatible with existing InfluxDB clients and tools like Grafana.
+The cure for time-series GERD (gastro etc reflux disease). A lightweight InfluxDB-compatible time series database written in Go, which implements a subset of the HTTP and UDP APIs, making it compatible with existing clients and tools like Grafana.
 
 ## Features
 
