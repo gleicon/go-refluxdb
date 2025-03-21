@@ -27,7 +27,7 @@ jobs:
       run: |
         wget https://dl.influxdata.com/influxdb/releases/influxdb2-client-2.7.3-linux-amd64.tar.gz
         tar xvzf influxdb2-client-2.7.3-linux-amd64.tar.gz
-        sudo cp influxdb2-client-2.7.3-linux-amd64/influx /usr/local/bin/
+        sudo cp influxdb2-client-2.7.3-linux-amd64/bin/influx /usr/local/bin/
         
     - name: Start RefluxDB
       run: |
