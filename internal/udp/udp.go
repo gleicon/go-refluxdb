@@ -22,14 +22,16 @@ type Server struct {
 	mu         sync.Mutex
 	isRunning  bool
 	bufferSize int
+	log        *logrus.Logger
 }
 
 // New creates a new UDP server
-func New(addr string, db *persistence.Manager) *Server {
+func New(addr string, db *persistence.Manager, logger *logrus.Logger) *Server {
 	return &Server{
 		addr:       addr,
 		db:         db,
 		bufferSize: 1024,
+		log:        logger,
 	}
 }
 
@@ -55,7 +57,7 @@ func (s *Server) Start(ctx context.Context) (string, error) {
 	s.conn = conn
 
 	actualAddr := conn.LocalAddr().String()
-	logrus.Infof("Starting UDP server on %s", actualAddr)
+	s.log.Infof("Starting UDP server on %s", actualAddr)
 
 	s.wg.Add(1)
 	go func() {
@@ -70,7 +72,7 @@ func (s *Server) Start(ctx context.Context) (string, error) {
 				n, _, err := conn.ReadFromUDP(buffer)
 				if err != nil {
 					if !strings.Contains(err.Error(), "use of closed network connection") {
-						logrus.Errorf("Error reading UDP packet: %v", err)
+						s.log.Errorf("Error reading UDP packet: %v", err)
 					}
 					continue
 				}
@@ -85,7 +87,7 @@ func (s *Server) Start(ctx context.Context) (string, error) {
 
 					proto, err := protocol.Parse(line)
 					if err != nil {
-						logrus.Errorf("Error parsing line protocol: %v", err)
+						s.log.Errorf("Error parsing line protocol: %v", err)
 						continue
 					}
 
@@ -104,7 +106,7 @@ func (s *Server) Start(ctx context.Context) (string, error) {
 							if intVal, err := strconv.ParseInt(numStr, 10, 64); err == nil {
 								floatValue = float64(intVal)
 							} else {
-								logrus.Errorf("Invalid integer value: %s", value)
+								s.log.Errorf("Invalid integer value: %s", value)
 								continue
 							}
 						} else if strings.ToLower(value) == "true" {
@@ -116,14 +118,14 @@ func (s *Server) Start(ctx context.Context) (string, error) {
 							if val, err := strconv.ParseFloat(value, 64); err == nil {
 								floatValue = val
 							} else {
-								logrus.Errorf("Invalid numeric value: %s", value)
+								s.log.Errorf("Invalid numeric value: %s", value)
 								continue
 							}
 						}
 
 						err = s.db.SaveMeasurement(proto.Measurement, field, floatValue, proto.Tags, proto.Timestamp)
 						if err != nil {
-							logrus.Errorf("Error saving measurement: %v", err)
+							s.log.Errorf("Error saving measurement: %v", err)
 						}
 					}
 				}

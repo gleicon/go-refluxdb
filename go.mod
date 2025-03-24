@@ -6,7 +6,9 @@ toolchain go1.23.6
 
 require (
 	github.com/gin-gonic/gin v1.10.0
+	github.com/influxdata/influxdb-client-go/v2 v2.14.0
 	github.com/mattn/go-sqlite3 v1.14.24
+	github.com/mochi-mqtt/server/v2 v2.4.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
 )
@@ -24,7 +26,7 @@ require (
 	github.com/go-playground/validator/v10 v10.25.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/google/uuid v1.3.1 // indirect
-	github.com/influxdata/influxdb-client-go/v2 v2.14.0 // indirect
+	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
@@ -35,6 +37,7 @@ require (
 	github.com/oapi-codegen/runtime v1.0.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/rs/xid v1.4.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	golang.org/x/arch v0.15.0 // indirect

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gleicon/go-refluxdb/internal/persistence"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -18,7 +19,7 @@ func setupTestServer(t *testing.T) (*Server, *persistence.Manager) {
 	db, err := persistence.New(":memory:")
 	assert.NoError(t, err)
 
-	srv := New(":8087", db)
+	srv := New(":8087", db, logrus.New())
 	return srv, db
 }
 

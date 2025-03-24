@@ -25,7 +25,7 @@ type Server struct {
 	log    *logrus.Logger
 }
 
-func New(addr string, db *persistence.Manager) *Server {
+func New(addr string, db *persistence.Manager, logger *logrus.Logger) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -34,7 +34,7 @@ func New(addr string, db *persistence.Manager) *Server {
 		addr:   addr,
 		db:     db,
 		router: router,
-		log:    logrus.New(),
+		log:    logger,
 	}
 
 	s.setupRoutes()

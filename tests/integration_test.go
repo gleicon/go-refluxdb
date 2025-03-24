@@ -13,6 +13,7 @@ import (
 	"github.com/gleicon/go-refluxdb/internal/udp"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/influxdata/influxdb-client-go/v2/api/write"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -29,7 +30,7 @@ func setupTestEnvironment(t *testing.T) (*server.Server, *udp.Server, *persisten
 	})
 
 	// Use dynamic port allocation
-	httpServer := server.New(":0", db)
+	httpServer := server.New(":0", db, logrus.New())
 	udpServer := udp.New(":0", db)
 
 	return httpServer, udpServer, db
