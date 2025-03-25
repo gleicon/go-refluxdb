@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -28,7 +29,18 @@ func main() {
 	})
 
 	// Force debug level on the logger instance
-	logger.SetLevel(logrus.DebugLevel)
+	logLevel := os.Getenv("LOG_LEVEL")
+
+	if strings.ToLower(logLevel) == "debug" {
+		logger.Println("Setting log level to debug")
+		logger.SetLevel(logrus.DebugLevel)
+	} else if strings.ToLower(logLevel) == "warn" {
+		logger.Println("Setting log level to warn")
+		logger.SetLevel(logrus.WarnLevel)
+	} else {
+		logger.Println("Setting log level to info")
+		logger.SetLevel(logrus.InfoLevel)
+	}
 
 	logger.WithFields(logrus.Fields{
 		"log_level": logger.GetLevel().String(),
