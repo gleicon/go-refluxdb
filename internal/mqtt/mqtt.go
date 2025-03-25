@@ -18,6 +18,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// Config holds MQTT server configuration
+type Config struct {
+	Username string
+	Password string
+}
+
 // Server represents an MQTT server
 type Server struct {
 	addr      string
@@ -27,17 +33,36 @@ type Server struct {
 	mu        sync.Mutex
 	isRunning bool
 	log       *logrus.Logger
+	config    *Config
 }
 
 // New creates a new MQTT server
 func New(addr string, db *persistence.Manager, logger *logrus.Logger) *Server {
-	//logger := logrus.New()
-	//logger.SetLevel(logrus.DebugLevel)
-	return &Server{
+	s := &Server{
 		addr: addr,
 		db:   db,
 		log:  logger,
+		config: &Config{
+			Username: "admin", // Default username
+			Password: "admin", // Default password
+		},
 	}
+
+	// Log server creation
+	s.log.WithFields(logrus.Fields{
+		"addr":         addr,
+		"username":     s.config.Username,
+		"password_set": s.config.Password != "",
+		"log_level":    s.log.GetLevel().String(),
+	}).Debug("Created new MQTT server instance")
+
+	return s
+}
+
+// SetCredentials sets the MQTT server credentials
+func (s *Server) SetCredentials(username, password string) {
+	s.config.Username = username
+	s.config.Password = password
 }
 
 // messageHook implements the mqtt.Hook interface for handling published messages
@@ -50,10 +75,19 @@ func (h *messageHook) ID() string {
 }
 
 func (h *messageHook) Provides(b byte) bool {
-	return b == 'p' // OnPublished
+	h.server.log.WithFields(logrus.Fields{
+		"hook":       "message-handler",
+		"capability": fmt.Sprintf("%x", b),
+		"provides":   b == 0x04,
+	}).Debug("Checking message hook capabilities")
+	// Only provide OnPublish capability
+	return b == 0x04
 }
 
 func (h *messageHook) Init(config any) error {
+	h.server.log.WithFields(logrus.Fields{
+		"hook": "message-handler",
+	}).Debug("Initializing message hook")
 	return nil
 }
 
@@ -146,21 +180,12 @@ func (h *messageHook) OnClientExpired(cl *mqtt.Client) {
 }
 
 func (h *messageHook) OnConnect(cl *mqtt.Client, pk packets.Packet) error {
-	h.server.log.WithFields(logrus.Fields{
-		"client_id": cl.ID,
-		"username":  cl.Properties.Username,
-		"clean":     cl.Properties.Clean,
-	}).Debug("Client connecting")
+	// No-op - let aclHook handle connection events
 	return nil
 }
 
 func (h *messageHook) OnConnectAuthenticate(cl *mqtt.Client, pk packets.Packet) bool {
-	h.server.log.WithFields(logrus.Fields{
-		"client_id": cl.ID,
-		"username":  cl.Properties.Username,
-		"clean":     cl.Properties.Clean,
-		"protocol":  cl.Properties.ProtocolVersion,
-	}).Debug("Client authenticating - allowing connection without credentials")
+	// Let aclHook handle authentication
 	return true
 }
 
@@ -276,17 +301,30 @@ func (h *messageHook) StoredSysInfo() (storage.SystemInfo, error) {
 }
 
 // aclHook implements the mqtt.Hook interface for ACL checks
-type aclHook struct{}
+type aclHook struct {
+	server *Server
+}
 
 func (h *aclHook) ID() string {
 	return "acl-checker"
 }
 
 func (h *aclHook) Provides(b byte) bool {
-	return b == 'a' // ACLCheck
+	h.server.log.WithFields(logrus.Fields{
+		"hook":       "acl-checker",
+		"capability": fmt.Sprintf("%x", b),
+		"provides":   b == 0x01 || b == 0x02 || b == 0x08,
+	}).Debug("Checking ACL hook capabilities")
+	// 0x01 = OnConnect
+	// 0x02 = OnACLCheck
+	// 0x08 = OnConnectAuthenticate
+	return b == 0x01 || b == 0x02 || b == 0x08
 }
 
 func (h *aclHook) Init(config any) error {
+	h.server.log.WithFields(logrus.Fields{
+		"hook": "acl-checker",
+	}).Debug("Initializing ACL hook")
 	return nil
 }
 
@@ -306,12 +344,72 @@ func (h *aclHook) OnClientExpired(cl *mqtt.Client) {
 }
 
 func (h *aclHook) OnConnect(cl *mqtt.Client, pk packets.Packet) error {
+	h.server.log.WithFields(logrus.Fields{
+		"hook":      "acl-checker",
+		"client_id": cl.ID,
+		"username":  cl.Properties.Username,
+		"clean":     cl.Properties.Clean,
+	}).Debug("ACL hook: Client connecting")
 	return nil
 }
 
 func (h *aclHook) OnConnectAuthenticate(cl *mqtt.Client, pk packets.Packet) bool {
-	// Always allow connections without requiring credentials
-	return true
+	h.server.log.WithFields(logrus.Fields{
+		"hook":      "acl-checker",
+		"client_id": cl.ID,
+		"username":  cl.Properties.Username,
+	}).Debug("ACL hook: Starting authentication")
+	// Log raw values for debugging
+	h.server.log.WithFields(logrus.Fields{
+		"client_id":              cl.ID,
+		"username":               string(cl.Properties.Username),
+		"username_bytes":         fmt.Sprintf("%v", cl.Properties.Username),
+		"clean":                  cl.Properties.Clean,
+		"protocol":               cl.Properties.ProtocolVersion,
+		"config_username":        h.server.config.Username,
+		"config_password":        h.server.config.Password,
+		"connect_password":       string(pk.Connect.Password),
+		"connect_password_bytes": fmt.Sprintf("%v", pk.Connect.Password),
+		"hook_name":              "acl-checker",
+	}).Debug("Raw authentication attempt details")
+
+	// Check credentials with explicit string conversion
+	clientUsername := string(cl.Properties.Username)
+	clientPassword := string(pk.Connect.Password)
+
+	h.server.log.WithFields(logrus.Fields{
+		"client_username": clientUsername,
+		"config_username": h.server.config.Username,
+		"username_match":  clientUsername == h.server.config.Username,
+		"hook_name":       "acl-checker",
+	}).Debug("Username comparison")
+
+	if clientUsername == h.server.config.Username {
+		h.server.log.WithFields(logrus.Fields{
+			"client_password": clientPassword,
+			"config_password": h.server.config.Password,
+			"password_match":  clientPassword == h.server.config.Password,
+			"hook_name":       "acl-checker",
+		}).Debug("Password comparison")
+
+		if clientPassword == h.server.config.Password {
+			h.server.log.WithFields(logrus.Fields{
+				"client_id": cl.ID,
+				"username":  clientUsername,
+				"hook_name": "acl-checker",
+			}).Info("Authentication successful")
+			return true
+		}
+	}
+
+	h.server.log.WithFields(logrus.Fields{
+		"client_id":      cl.ID,
+		"username":       clientUsername,
+		"username_match": clientUsername == h.server.config.Username,
+		"password_match": clientPassword == h.server.config.Password,
+		"hook_name":      "acl-checker",
+	}).Warn("Authentication failed")
+	return false
 }
 
 func (h *aclHook) OnDisconnect(cl *mqtt.Client, err error, expire bool) {
@@ -435,7 +533,15 @@ func (s *Server) Start(ctx context.Context) error {
 	s.isRunning = true
 	s.mu.Unlock()
 
-	// Create new MQTT server
+	// Log server configuration
+	s.log.WithFields(logrus.Fields{
+		"addr":         s.addr,
+		"username":     s.config.Username,
+		"password_set": s.config.Password != "",
+		"log_level":    s.log.GetLevel().String(),
+	}).Debug("Starting MQTT server with configuration")
+
+	// Create new MQTT server with explicit options
 	s.server = mqtt.New(&mqtt.Options{
 		InlineClient: true,
 		Capabilities: &mqtt.Capabilities{
@@ -453,12 +559,35 @@ func (s *Server) Start(ctx context.Context) error {
 		},
 	})
 
-	// Add hooks in the correct order
-	s.server.AddHook(&aclHook{}, nil)              // Add ACL hook first
-	s.server.AddHook(&messageHook{server: s}, nil) // Add message hook second
+	// Add hooks in the correct order with explicit logging
+	s.log.Debug("Adding MQTT hooks")
 
-	// Add TCP listener
-	tcp := listeners.NewTCP("tcp", s.addr, nil)
+	// Add ACL hook first to handle authentication
+	aclHook := &aclHook{server: s}
+	s.server.AddHook(aclHook, &mqtt.HookOptions{})
+	s.log.WithFields(logrus.Fields{
+		"hook":     "acl-checker",
+		"provides": []string{"acl", "auth"},
+		"order":    "first",
+	}).Debug("Added ACL hook for authentication")
+
+	// Add message hook second to handle messages
+	msgHook := &messageHook{server: s}
+	s.server.AddHook(msgHook, &mqtt.HookOptions{})
+	s.log.WithFields(logrus.Fields{
+		"hook":     "message-handler",
+		"provides": []string{"publish"},
+		"order":    "second",
+	}).Debug("Added message hook for handling messages")
+
+	// Add TCP listener with debug logging
+	tcp := listeners.NewTCP("tcp", s.addr, &listeners.Config{})
+	s.log.WithFields(logrus.Fields{
+		"listener": "tcp",
+		"addr":     s.addr,
+		"auth":     "custom", // Log that we're using custom authentication
+	}).Debug("Adding TCP listener")
+
 	err := s.server.AddListener(tcp)
 	if err != nil {
 		return fmt.Errorf("failed to add TCP listener: %v", err)
@@ -470,7 +599,12 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start MQTT server: %v", err)
 	}
 
-	s.log.Infof("Started MQTT server on %s", s.addr)
+	s.log.WithFields(logrus.Fields{
+		"addr":      s.addr,
+		"hooks":     []string{"acl-checker", "message-handler"},
+		"log_level": s.log.GetLevel().String(),
+		"auth":      "custom", // Log that we're using custom authentication
+	}).Debug("MQTT server started successfully")
 
 	// Handle shutdown
 	s.wg.Add(1)
@@ -485,6 +619,13 @@ func (s *Server) Start(ctx context.Context) error {
 
 // Stop stops the MQTT server
 func (s *Server) Stop() error {
+	s.log.WithFields(logrus.Fields{
+		"addr":      s.addr,
+		"hooks":     []string{"acl-checker", "message-handler"},
+		"log_level": s.log.GetLevel().String(),
+		"auth":      "custom", // Log that we're using custom authentication
+	}).Debug("MQTT: server shutdown")
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

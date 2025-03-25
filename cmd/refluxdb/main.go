@@ -16,22 +16,24 @@ import (
 )
 
 func main() {
-
-	lvl, ok := os.LookupEnv("LOG_LEVEL")
-	// LOG_LEVEL not set, let's default to debug
-	if !ok {
-		lvl = "debug"
-	}
-	// parse string, this is built-in feature of logrus
-	ll, err := logrus.ParseLevel(lvl)
-	if err != nil {
-		ll = logrus.DebugLevel
-	}
-	// set global log level
-	logrus.SetLevel(ll)
+	// Force debug level for now
+	//logrus.SetLevel(logrus.DebugLevel)
 	logger := logrus.New()
 
-	logger.Println("Starting go-refluxdb...")
+	// Set output to stdout and format
+	logger.SetOutput(os.Stdout)
+	logger.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp: true,
+		ForceColors:   true,
+	})
+
+	// Force debug level on the logger instance
+	logger.SetLevel(logrus.DebugLevel)
+
+	logger.WithFields(logrus.Fields{
+		"log_level": logger.GetLevel().String(),
+		"output":    "stdout",
+	}).Debug("Logger initialized with debug level")
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -48,6 +50,22 @@ func main() {
 	httpServer := server.New(":8086", db, logger)
 	udpServer := udp.New(":8089", db, logger)
 	mqttServer := mqtt.New("localhost:1883", db, logger)
+
+	// Configure MQTT credentials from environment variables
+	if username := os.Getenv("MQTT_USERNAME"); username != "" {
+		if password := os.Getenv("MQTT_PASSWORD"); password != "" {
+			mqttServer.SetCredentials(username, password)
+			logger.WithFields(logrus.Fields{
+				"username":     username,
+				"password_set": password != "",
+			}).Debug("MQTT credentials configured from environment")
+		}
+	} else {
+		logger.WithFields(logrus.Fields{
+			"username":     "admin",
+			"password_set": true,
+		}).Debug("Using default MQTT credentials")
+	}
 
 	// WaitGroup for graceful shutdown
 	var wg sync.WaitGroup

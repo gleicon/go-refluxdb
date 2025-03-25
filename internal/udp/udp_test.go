@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gleicon/go-refluxdb/internal/persistence"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -14,7 +15,7 @@ func setupTestServer(t *testing.T) (*Server, *persistence.Manager) {
 	db, err := persistence.New(":memory:")
 	assert.NoError(t, err)
 
-	srv := New(":8089", db)
+	srv := New(":8089", db, logrus.New())
 	return srv, db
 }
 
@@ -22,7 +23,7 @@ func TestUDPServer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv := New(":0", nil)
+	srv := New(":0", nil, logrus.New())
 	assert.NotNil(t, srv)
 
 	errChan := make(chan error, 1)
@@ -51,7 +52,7 @@ func TestUDPServerWithInvalidAddress(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv := New("invalid-address", nil)
+	srv := New("invalid-address", nil, logrus.New())
 	assert.NotNil(t, srv)
 
 	errChan := make(chan error, 1)
